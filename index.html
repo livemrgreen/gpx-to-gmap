@@ -3,25 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPX/INR to Google Maps Itinerary</title>
+    <title>GPX/INR to Google Maps</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f4f4f9; }
-        .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        body { font-family: -apple-system, system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: #f4f4f9; margin: 0; padding: 20px; box-sizing: border-box; }
+        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
         h2 { margin-top: 0; color: #333; }
-        input { margin: 1rem 0; }
-        button { background: #4285F4; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        input { margin: 1.5rem 0; width: 100%; }
+        
+        button, .btn-link { 
+            display: block; width: 100%; box-sizing: border-box;
+            background: #4285F4; color: white; border: none; 
+            padding: 12px; border-radius: 6px; cursor: pointer; 
+            font-weight: bold; text-decoration: none; font-size: 1rem;
+            margin-top: 10px;
+        }
         button:hover { background: #357ae8; }
-        .info { font-size: 0.8rem; color: #666; margin-top: 1rem; max-width: 300px; }
+        
+        /* The link that appears after processing */
+        #mapLink { background: #34a853; display: none; }
+        #mapLink:hover { background: #2d9249; }
+
+        #status { margin-top: 1rem; font-weight: bold; color: #1a73e8; min-height: 1.2em; }
+        .info { font-size: 0.8rem; color: #666; margin-top: 1.5rem; line-height: 1.4; }
     </style>
 </head>
 <body>
 
 <div class="card">
     <h2>GPX/INR Itinerary Mapper</h2>
-    <p>Select a .gpx or .inr file to view it in Google Maps.</p>
+    <p>Select a .gpx or .inr file to begin.</p>
+    
     <input type="file" id="gpxFile" accept=".gpx,.inr">
-    <br>
-    <button onclick="processGPX()">Open itinerary in Google Maps</button>
+    
+    <button id="processBtn" onclick="processGPX()">Process File</button>
+
+    <div id="status"></div>
+    
+    <a id="mapLink" class="btn-link" target="_blank">Open in Google Maps</a>
+
     <div class="info">
         Note: Google Maps limits the number of waypoints. This script will automatically sample up to 20 points from your file.
     </div>
@@ -30,6 +49,8 @@
 <script>
     function processGPX() {
         const fileInput = document.getElementById('gpxFile');
+        const status = document.getElementById('status');
+        const mapLink = document.getElementById('mapLink');
         const file = fileInput.files[0];
 
         if (!file) {
@@ -37,43 +58,53 @@
             return;
         }
 
+        status.innerText = "Processing...";
+        mapLink.style.display = "none";
+
         const reader = new FileReader();
         reader.onload = function(event) {
-            const content = event.target.result;
-            const xmlDoc = new DOMParser().parseFromString(content, "text/xml");
-            
-            // Look for track points (trkpt) or waypoints (wpt)
-            let points = Array.from(xmlDoc.querySelectorAll("trkpt, wpt"));
-            
-            if (points.length === 0) {
-                alert("No waypoints found in this file.");
-                return;
-            }
-
-            // Google Maps URL limit is strict. Let's downsample to max 20 points.
-            const maxPoints = 20;
-            let sampledPoints = [];
-            
-            if (points.length <= maxPoints) {
-                sampledPoints = points;
-            } else {
-                const step = Math.floor(points.length / maxPoints);
-                for (let i = 0; i < maxPoints; i++) {
-                    sampledPoints.push(points[i * step]);
+            try {
+                const content = event.target.result;
+                const xmlDoc = new DOMParser().parseFromString(content, "text/xml");
+                
+                const points = Array.from(xmlDoc.querySelectorAll("trkpt, wpt"));
+                
+                if (points.length === 0) {
+                    status.innerText = "";
+                    alert("No waypoints found in this file.");
+                    return;
                 }
-                // Ensure the very last point is included
-                sampledPoints[sampledPoints.length - 1] = points[points.length - 1];
+
+                // Downsample to max 20 points for URL stability
+                const maxPoints = 20;
+                let sampledPoints = [];
+                
+                if (points.length <= maxPoints) {
+                    sampledPoints = points;
+                } else {
+                    const step = Math.floor(points.length / (maxPoints - 1));
+                    for (let i = 0; i < maxPoints - 1; i++) {
+                        sampledPoints.push(points[i * step]);
+                    }
+                    sampledPoints.push(points[points.length - 1]);
+                }
+
+                const coordinates = sampledPoints.map(p => {
+                    return p.getAttribute("lat") + "," + p.getAttribute("lon");
+                });
+
+                const baseUrl = "https://www.google.com/maps/dir/";
+                const finalUrl = baseUrl + coordinates.join("/");
+
+                // Update the hidden link and show it
+                mapLink.href = finalUrl;
+                mapLink.style.display = "block";
+                status.innerText = "Success! Tap below to open.";
+
+            } catch (err) {
+                status.innerText = "Error processing file.";
+                console.error(err);
             }
-
-            // Extract lat/lon and format for Google Maps
-            const coordinates = sampledPoints.map(p => {
-                return p.getAttribute("lat") + "," + p.getAttribute("lon");
-            });
-
-            const baseUrl = "https://www.google.com/maps/dir/";
-            const finalUrl = baseUrl + coordinates.join("/");
-
-            window.open(finalUrl, '_blank');
         };
 
         reader.readAsText(file);
@@ -81,7 +112,4 @@
 </script>
 
 </body>
-
 </html>
-
-
