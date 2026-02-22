@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPX/INR to Google Maps Itinerary</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f4f4f9; }
+        .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; color: #333; }
+        input { margin: 1rem 0; }
+        button { background: #4285F4; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #357ae8; }
+        .info { font-size: 0.8rem; color: #666; margin-top: 1rem; max-width: 300px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>GPX/INR Itinerary Mapper</h2>
+    <p>Upload your .gpx or .inr file to open it in Google Maps.</p>
+    <input type="file" id="gpxFile" accept=".gpx,.inr">
+    <br>
+    <button onclick="processGPX()">Generate Itinerary</button>
+    <div class="info">
+        Note: Google Maps limits the number of waypoints. This script will automatically sample up to 20 points from your file.
+    </div>
+</div>
+
+<script>
+    function processGPX() {
+        const fileInput = document.getElementById('gpxFile');
+        const file = fileInput.files[0];
+
+        if (!file) {
+            alert("Please select a file first!");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const content = event.target.result;
+            const xmlDoc = new DOMParser().parseFromString(content, "text/xml");
+            
+            // Look for track points (trkpt) or waypoints (wpt)
+            let points = Array.from(xmlDoc.querySelectorAll("trkpt, wpt"));
+            
+            if (points.length === 0) {
+                alert("No waypoints found in this file.");
+                return;
+            }
+
+            // Google Maps URL limit is strict. Let's downsample to max 20 points.
+            const maxPoints = 20;
+            let sampledPoints = [];
+            
+            if (points.length <= maxPoints) {
+                sampledPoints = points;
+            } else {
+                const step = Math.floor(points.length / maxPoints);
+                for (let i = 0; i < maxPoints; i++) {
+                    sampledPoints.push(points[i * step]);
+                }
+                // Ensure the very last point is included
+                sampledPoints[sampledPoints.length - 1] = points[points.length - 1];
+            }
+
+            // Extract lat/lon and format for Google Maps
+            const coordinates = sampledPoints.map(p => {
+                return p.getAttribute("lat") + "," + p.getAttribute("lon");
+            });
+
+            const baseUrl = "https://www.google.com/maps/dir/";
+            const finalUrl = baseUrl + coordinates.join("/");
+
+            window.open(finalUrl, '_blank');
+        };
+
+        reader.readAsText(file);
+    }
+</script>
+
+</body>
+</html>
